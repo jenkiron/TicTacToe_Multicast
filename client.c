@@ -1,7 +1,12 @@
-/*Lab 7
-**Client Side
-**Changed back to SOCK_STREAM
-*/
+//Project for multicast
+//Client will be provided a multicast group defined, one in file
+//client will connect with stream, start game, game gets dropped, i receive no data
+//i send out to multicast group with datagram that i want a new game
+//server replies with a datagram with a port, ip address is in a field
+//i go back and connect through stream to that server
+//after resuming i provide 5byte stream then 9 bytes for positions already played
+//then resume game.
+
 
 #include <stdio.h>
 #include <strings.h>
@@ -17,16 +22,20 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-//Defining version #5
+
 #define ROWS  3
 #define COLUMNS  3
 #define TIMETOWAIT 30
-#define VERSION 5
+#define VERSION 8  //last version after 7
 #define PLAYING 1
 #define GAMEOVER 2
 #define NEWGAME 0
 #define SIZEOFMESSAGE 5
 #define MOVE 1
+
+//Defining multicast group
+#define MC_PORT 1818
+#define MC_GROUP "239.0.0.1"
 
 //Defining functions
 int checkwin(char board[ROWS][COLUMNS]);
@@ -73,7 +82,14 @@ int main(int argc, char *argv[])
   PORT = strtol(argv[2],NULL, 10);
   playerNum = atoi(argv[3]);
 
-  //changed to sock stream
+
+
+  sd = socket(AF_INET, SOCK_DGRAM, 0);
+
+
+
+  /*
+  //changed to sock stream for LAB7
   if((sd = socket (AF_INET, SOCK_STREAM, 0)) < 0){
     perror("Error opening stream socket.\n");
     exit(1);
@@ -82,7 +98,9 @@ int main(int argc, char *argv[])
   server_address.sin_port = htons(PORT);
   server_address.sin_addr.s_addr = inet_addr(IP);
 
-  /*
+  
+
+  //lab 6
   myAddress.sin_family = AF_INET;
   PORT += 1;
   myAddress.sin_port = htons(PORT);
@@ -95,6 +113,9 @@ int main(int argc, char *argv[])
   }
   */
   
+
+
+
   //connect for lab 7
   if (connect(sd, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
   	close(sd);
@@ -350,6 +371,7 @@ void print_board(char board[ROWS][COLUMNS])
   printf("     |     |     \n\n");
 }
 
+
 int initSharedState(char board[ROWS][COLUMNS]){    
   /* this just initializing the shared state aka the board */
   int i, j, count = 1;
@@ -413,6 +435,12 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
     //rc = recvfrom(sd, data, SIZEOFMESSAGE, 0, (struct sockaddr *) from, (socklen_t *)&fromLength);
     rc = read(sd, data, SIZEOFMESSAGE);
     if (rc <0){
+      //check for 0
+      //send message on the multicast group to see if anyone is there
+      //then recvfrom, ip and port, then go back and connect 
+      
+      sd
+      ip/port
       printf ("Timeout occured after 30 seconds.\n");
       return -1;
     }
