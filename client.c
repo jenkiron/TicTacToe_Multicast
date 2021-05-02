@@ -26,10 +26,11 @@
 #define ROWS  3
 #define COLUMNS  3
 #define TIMETOWAIT 30
-#define VERSION 8  //last version after 7
+#define VERSION 6  //last version after 7
 #define PLAYING 1
 #define GAMEOVER 2
 #define NEWGAME 0
+#define RESUME 3
 #define SIZEOFMESSAGE 5
 #define MOVE 1
 
@@ -44,7 +45,7 @@ int tictactoe();
 int initSharedState(char board[ROWS][COLUMNS]);
 bool checkGameMove(int);
 int isSquareTaken(int choice, char board[ROWS][COLUMNS]);
-int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from, bool firstSequence);
+int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from, bool firstSequence, int sequence, char board[ROWS][COLUMNS]);
 
 
 //Checking proper args, setting up socket
@@ -55,10 +56,12 @@ int main(int argc, char *argv[])
   char IP[29];
   int PORT;
   char board[ROWS][COLUMNS]; 
-  int sd;         //socket description
-  int rc, ld;     //return code from recvfrom
+  int rc, ld, sd;     //return code from recvfrom
+
   struct sockaddr_in server_address;
   socklen_t fromLength;
+
+
 
 
   //Here  we check for the proper user provided arguments 
@@ -83,8 +86,15 @@ int main(int argc, char *argv[])
   playerNum = atoi(argv[3]);
 
 
+  //For the project I connect first through TCP
+  if((sd = socket (AF_INET, SOCK_STREAM, 0)) < 0){
+    perror("Error opening stream socket.\n");
+    exit(1);
+  }
 
-  sd = socket(AF_INET, SOCK_DGRAM, 0);
+  server_address.sin_family = AF_INET;
+  server_address.sin_port = htons(PORT);
+  server_address.sin_addr.s_addr = inet_addr(IP);
 
 
 
@@ -115,13 +125,14 @@ int main(int argc, char *argv[])
   
 
 
-
+  /*
   //connect for lab 7
   if (connect(sd, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
   	close(sd);
   	perror("Something went wrong.");
   	exit(1);
   }
+  */
   
 
   rc = initSharedState(board); // Initialize the 'game' board
@@ -134,6 +145,20 @@ int main(int argc, char *argv[])
 //Game is played here for moves
 int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_in *saddr)
 {
+
+  //I need to establish the connection inside the tictactoe game to change the connection
+  //after a multicast server is found and I'm given an IP/Port
+
+
+  //i need to connect in here
+  //idk if its &saddr *saddr or saddr
+  if (connect(socket, (struct sockaddr *) &saddr, sizeof(struct sockaddr_in)) < 0) {
+    close(socket);
+    perror("Something went wrong.");
+    exit(1);
+  }
+
+
   int i, n, len, t, choice, gameNumber;
   int row, column;
   int mySequence = 0;//used to keep track of move order for players
@@ -199,7 +224,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
       int serverSequence;
       bool newGamecheck = (mySequence == 1) ? true : false;  
 
-      choice = getMoveFromNet(socket, buf, 1, saddr, newGamecheck);
+      choice = getMoveFromNet(socket, buf, 1, saddr, newGamecheck, mySequence, board);
       
       if(mySequence == 1){
         gameNumber = buf[3];
@@ -230,7 +255,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
         y--;
         printf("Waiting to receive a valid sequence.\n%d tries left.\n", y);
 
-        choice = getMoveFromNet(socket, buf, 1, saddr, false);
+        choice = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
         if(mySequence == 1){
           gameNumber = buf[3];
         }
@@ -301,10 +326,10 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
       printf("Sending gameover command.\n");
     }else{
       //client won
-      int ignore = getMoveFromNet(socket, buf, 1, saddr, false);
+      int ignore = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
       while(buf[1] != 02){
         y++;
-        ignore = getMoveFromNet(socket, buf, 1, saddr, false);
+        ignore = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
         printf("Checking for gameover command.\n");
         if(y == 3){
           printf("Never received game over command. \nWe'll assume we won.\n");
@@ -371,7 +396,6 @@ void print_board(char board[ROWS][COLUMNS])
   printf("     |     |     \n\n");
 }
 
-
 int initSharedState(char board[ROWS][COLUMNS]){    
   /* this just initializing the shared state aka the board */
   int i, j, count = 1;
@@ -404,29 +428,29 @@ int isSquareTaken(int choice, char board[ROWS][COLUMNS]){
     }
 }
 
-int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in *from, bool t)
+int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in *from, bool t, int sequence, char board[ROWS][COLUMNS])
 {
   /*****************************************************************/
   /* instead of getting a move from the user, get if from the net  */
   /* by doing a receive on the socket. this is all still STREAM    */
   /*****************************************************************/
   int movePosition;
-  int rc;
+  int rc, ld;
   char temp[SIZEOFMESSAGE];
 
-  int fromLength = sizeof(struct sockaddr_in);
+
   char *data = result;
-  temp[0] = VERSION;
-  temp[1] = NEWGAME;
-  temp[2] = 0;
-  temp[3] = 0;
-  temp[4] = 0;
 
 
+  memset(temp, 0, SIZEOFMESSAGE);
+  temp[0] = VERSION; //protocol version
+  temp[1] = NEWGAME; //command
+  
+  
+  //For timeouts
   struct timeval tv;
   tv.tv_sec = TIMETOWAIT;
   tv.tv_usec = 0;
-
   if (setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
     perror ("error"); // might want to exit here   
   
@@ -434,15 +458,66 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
   do {
     //rc = recvfrom(sd, data, SIZEOFMESSAGE, 0, (struct sockaddr *) from, (socklen_t *)&fromLength);
     rc = read(sd, data, SIZEOFMESSAGE);
-    if (rc <0){
+
+    if (rc <= 0){
+      char ack_port[4];
+      //we only need multicast group if we lose tcp connection
+      socklen_t addrlen;
+      struct sockaddr_in mg_addr;
+      bzero((char *)&mg_addr, sizeof(mg_addr));  
+      mg_addr.sin_family = AF_INET;  
+      mg_addr.sin_port = htons(MC_PORT);  
+      mg_addr.sin_addr.s_addr = inet_addr(MC_GROUP);  
+      addrlen = sizeof(mg_addr);
+
+      char boardInfo[9];
+      char getServer[SIZEOFMESSAGE];
+      char bcast[SIZEOFMESSAGE];
+      bcast[0] = VERSION;
+      bcast[1] = RESUME;
+
+      //to broadcast
+      int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+
       //check for 0
       //send message on the multicast group to see if anyone is there
       //then recvfrom, ip and port, then go back and connect 
-      
-      sd
-      ip/port
-      printf ("Timeout occured after 30 seconds.\n");
-      return -1;
+      printf ("Did we lose the server? Lets check the multicast group\n");
+      sendto(udp_sock, bcast, sizeof(bcast), 0, (struct sockaddr*) &mg_addr, addrlen);
+
+      //At this point i sent out to server
+      //I need to get ip and port info in their message
+      rc = recvfrom(udp_sock, getServer, SIZEOFMESSAGE, 0, (struct sockaddr *) from, &addrlen);
+      if(rc > 0){
+        //from sockaddr is my old tcp socket, im refreshing with the recvfrom ip and conecting to that
+        from->sin_family = AF_INET;
+        from->sin_port = ntohs(getServer[1]);
+        printf("We got infomration from multicast, %c %c\n", getServer[0], getServer[1]);
+        //Do i need this one?
+        //from->sin_addr.s_addr = inet_ntoa(from->sin_addr.s_addr);
+    }
+
+      int x = 0;
+      //send data now
+      for(int i = 0; i<ROWS; i++){
+        for(int j = 0; j<COLUMNS; j++){
+          boardInfo[x] = board[i][j];
+          x++;
+        }
+      }
+    
+
+    if (connect(sd, (struct sockaddr *) &from, sizeof(struct sockaddr_in)) < 0) {
+      close(sd);
+      printf("We failed to TCP connect to multicast server. Shutting down.\n");
+      exit(1);
+    }
+    //sending board data
+    ld = write(sd, boardInfo, 9);
+
+    //we should resume game from here
+
+    //return -1;
     }
     // have to handle timeout still. if timeout and playing game, return from here
     if (data[0] != VERSION){
