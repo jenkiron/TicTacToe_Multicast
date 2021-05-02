@@ -495,7 +495,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
         printf("We got infomration from multicast, %c %c\n", getServer[0], getServer[1]);
         //Do i need this one?
         //from->sin_addr.s_addr = inet_ntoa(from->sin_addr.s_addr);
-    }
+      }
 
       int x = 0;
       //send data now
@@ -507,18 +507,17 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       }
     
 
-    if (connect(sd, (struct sockaddr *) &from, sizeof(struct sockaddr_in)) < 0) {
-      close(sd);
-      printf("We failed to TCP connect to multicast server. Shutting down.\n");
-      exit(1);
-    }
-    //sending board data
-    ld = write(sd, boardInfo, 9);
+      if (connect(sd, (struct sockaddr *) &from, sizeof(struct sockaddr_in)) < 0) {
+        close(sd);
+        printf("We failed to TCP connect to multicast server. Shutting down.\n");
+        exit(1);
+      }
+      //sending board data
+      ld = write(sd, boardInfo, 9);
 
-    //we should resume game from here
+      //we should resume game from here
+      }//if (rc <= 0)
 
-    //return -1;
-    }
     // have to handle timeout still. if timeout and playing game, return from here
     if (data[0] != VERSION){
       printf ("Bad version\n");
@@ -539,7 +538,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       movePosition = (int)data[2];
       return (movePosition);
     }
-  }
+  }//do
   while (1);
 
   return -1; // should never get here
