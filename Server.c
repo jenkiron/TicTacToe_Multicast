@@ -32,9 +32,10 @@
 #define ROWS  3
 #define COLUMNS  3
 #define NUMBEROFBYTESINMESSAGE 1
-#define CURRENTVERSION 5 //Current protocol ver
+#define CURRENTVERSION 6 //Current protocol ver
 #define NEWGAME 0 //Command for new game request
 #define MOVE 1 //Command for move request
+#define RESUME 3 //Command to resume playing a game
 #define SIZEOFMESSAGE 5
 #define MAXGAMES 5 //Maximum games server may host at a time
 // DMO ERRORS
@@ -46,6 +47,10 @@
 #define GAMEOVERACK 5
 #define BADVERSION 6
 #define MAXCLIENTS 5
+
+// Define the MC group
+#define MC_PORT 1818
+#define MC_GROUP "239.0.0.1"
 /**********************************************************/
 /* pre define all the functions we will write/call        */
 /**********************************************************/
@@ -55,6 +60,7 @@ void print_board(char board[ROWS][COLUMNS]);
 int tictactoe(int sock, int playerNumber, char board[ROWS][COLUMNS], int playingGame, struct sockaddr_in *from);
 int getMoveFromNet(int cd, char result[NUMBEROFBYTESINMESSAGE], int playingGame, struct sockaddr_in * from);
 int createServerSocket(int portNumber, int *sock);
+int createMCSocket(int portNumber, int *MC_sock);
 int createClientSocket(char *ipAddress, int portno, struct sockaddr_in *sin_addr, int *sock);
 int sendToNet(int sock, char move [4], struct sockaddr_in *to);
 int initSharedState(char board[ROWS][COLUMNS]);
@@ -85,7 +91,7 @@ int main(int argc, char *argv[]) /* server program called with port # */
   int gameNumbers[]={0,0,0,0,0};
   char board[ROWS][COLUMNS];
   int row,column;
-  int sock, Socket,rc,connected_sd;
+  int MC_sock, sock, Socket,rc,connected_sd;
   int portNumber, playerNumber;
   struct sockaddr_in from;
   struct sockaddr_in sin_addr; /* structure for socket name 
@@ -118,6 +124,8 @@ int main(int argc, char *argv[]) /* server program called with port # */
 
   //Create socket and listen on it
   rc = createServerSocket(portNumber, &sock); // call a subroutine to create a socket
+  //Create MC socket
+  rc = createMCSocket(MC_PORT, &MC_sock); // call a subroutine to create a socket
   /***************************************************************************/
   /* If here then we have a valid socket. Init the state and get ready for   */
   /* an incoming newgame or move request. This will loop forever                  */
@@ -125,8 +133,11 @@ int main(int argc, char *argv[]) /* server program called with port # */
   socklen_t fromLength = sizeof(struct sockaddr_in); // HAS to be set in linux...
   Socket = sock ; // DGRAM doesn't understand connections, but STREAM did, so using same variable
   maxSD = Socket;//NEW
+  //MC_sock = socket(AF_INET,SOCK_DGRAM,0);
+
   while(1){ //loop forever and accept all comers for games!
     char data[40];
+    char message[40];
     char result [SIZEOFMESSAGE];
     memset (data, 0, 40); // always zero out the data in C
     memset (result, 0, SIZEOFMESSAGE); // always zero out the data in C
@@ -137,16 +148,60 @@ int main(int argc, char *argv[]) /* server program called with port # */
     /*************************************************************/
     FD_ZERO(&socketFDS);
     FD_SET(Socket,&socketFDS);
+    FD_SET(MC_sock,&socketFDS);
+    if(MC_sock>Socket){
+      maxSD=MC_sock;
+    }
     for(i=0;i<MAXCLIENTS;i++)
       if(clientSDList[i]>0){
         FD_SET(clientSDList[i],&socketFDS);
         if(clientSDList[i]>maxSD)
           maxSD = clientSDList[i];//Update our maxSD integer with current socket
       }
-    printf("waiting on select from main socket -> %d\n",Socket);
-    rc = select (maxSD+1, &socketFDS, NULL,NULL,NULL);
-    printf("select popped\n");
+      printf("Sock = %d MC = %d maxSD = %d\n",Socket, MC_sock, maxSD);
+      printf("waiting on select from main socket -> %d\n",Socket);
+      //printf("waiting on select from MC socket -> %d\n",MC_sock);
+      rc = select (maxSD+1, &socketFDS, NULL,NULL,NULL);
+      printf("select popped rc: %d\n",rc);
+    
+    //Checking for hit in the MC sock
+    if(FD_ISSET(MC_sock,&socketFDS)){//Accept new connection/socket and store below
+      printf("MC_sock hit!\n");
+      memset(message,0,40);
+      rc = recvfrom(MC_sock, message, sizeof(message), 0,
+                   (struct sockaddr *) &from, &fromLength);//MC recv
+      printf("Received:%s on MC socket\n",message);
+      if(message[0]!= CURRENTVERSION){
+        printf("Bad version. . .\n");
+        //Everything below this line is a test
+        char replyC[3];
+        short tempPort;
+        memset(replyC,0,3);
+        replyC[0]=CURRENTVERSION;
+        printf("TESTSending port: %d\n",portNumber);
+        tempPort = htons(portNumber);
+        replyC[1]=tempPort;
+        printf("TESTSending port: %d\n",replyC[1]);
+        printf("TESTSending port: %d\n",ntohs(replyC[1]));
+        //test ends here 
+        continue;
+      }
+      else if(playingGame<MAXGAMES){
+        char replyC[3];
+        short tempPort;
+        memset(replyC,0,3);
+        replyC[0]=CURRENTVERSION;
+        tempPort = htons(portNumber);
+        replyC[1]=tempPort;
+        printf("Sending port: %d\n",replyC[1]);
+        //strcat here the port number
+        //strcat(replyC,strtol(tempPort, NULL,10));
+        printf("Game Available!!!\n");
+        rc = sendto(MC_sock,replyC,sizeof(replyC),0,(struct sockaddr *) &from, fromLength);
+      }
+    }
     if(FD_ISSET(Socket,&socketFDS)){//Accept new connection/socket and store below
+    //Same as above with MCsock new ifstatement
       connected_sd = accept (Socket,(struct sockaddr *)&from, &fromLength);
       if(connected_sd<0){
         printf("something went wrong...\n");
@@ -174,15 +229,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
           gameNumbers[data[3]]=0;
           continue;
         }
-        //TODO:This needs work
-        /*
-        for(int j=0;j<MAXGAMES;j++){
-          if(activeGames[j].active==false){ //Here we check for active games
-            printf("found a game!%d\n",j);
-            activeGames[j].active=true;
-          }
-        }
-        */
         //Received bad version protocol
         if (data[0] != CURRENTVERSION){
 	  printf ("Bad version\n");
@@ -315,6 +361,12 @@ int main(int argc, char *argv[]) /* server program called with port # */
         //TCP version for lab7
         rc = write(clientSDList[i], endPack, SIZEOFMESSAGE);
         printf("Sent %x,%x,%x,%d to game %d\n",endPack[0],endPack[1],endPack[2],endPack[4],endPack[3]);
+      }
+      else if(data[1]==RESUME){
+        char tempb[ROWS][COLUMNS];
+        rc = read(clientSDList[i],&tempb,9);
+        printf("test\n");
+        print_board(tempb);
       }
       for (int i=0; i<MAXGAMES; i++){
         printf("Game%d recent data: %x,%x,%x\n",i,activeGames[i].lastMove[0],activeGames[i].lastMove[1],activeGames[i].lastMove[2]);
@@ -600,6 +652,38 @@ int  createServerSocket(int portNumber, int *sock){
   return 1;
 
 }
+
+int createMCSocket(int portNumber, int *MC_sock){
+  struct sockaddr_in addr;
+  socklen_t addrlen;
+  struct ip_mreq mreq;
+
+  /* set up MulitCast socket */
+  *MC_sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (*MC_sock < 0) {
+    perror("socket");
+    exit(1);
+  }
+  bzero((char *)&addr, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port = htons(MC_PORT);
+  addrlen = sizeof(addr);
+
+  if (bind(*MC_sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+    perror("bind");
+    exit(1);
+  }
+  mreq.imr_multiaddr.s_addr = inet_addr(MC_GROUP);
+  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+  if (setsockopt(*MC_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                 &mreq, sizeof(mreq)) < 0) {
+    perror("setsockopt mreq");
+    exit(1);
+  }
+  return 1;
+}
+
 int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from)
 {
   /*****************************************************************/
