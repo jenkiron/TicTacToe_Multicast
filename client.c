@@ -61,9 +61,6 @@ int main(int argc, char *argv[])
   struct sockaddr_in server_address;
   socklen_t fromLength;
 
-
-
-
   //Here  we check for the proper user provided arguments 
   //TODO:Check args here for deciding Server or Client
   if(argc != 4 ){
@@ -96,44 +93,12 @@ int main(int argc, char *argv[])
   server_address.sin_port = htons(PORT);
   server_address.sin_addr.s_addr = inet_addr(IP);
 
-
-
-  /*
-  //changed to sock stream for LAB7
-  if((sd = socket (AF_INET, SOCK_STREAM, 0)) < 0){
-    perror("Error opening stream socket.\n");
+  if (connect(sd, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
+    close(sd);
+    perror("Something went wrong.");
     exit(1);
   }
-  server_address.sin_family = AF_INET;
-  server_address.sin_port = htons(PORT);
-  server_address.sin_addr.s_addr = inet_addr(IP);
 
-  
-
-  //lab 6
-  myAddress.sin_family = AF_INET;
-  PORT += 1;
-  myAddress.sin_port = htons(PORT);
-  myAddress.sin_addr.s_addr = INADDR_ANY;
-  
-  //****These are the lines needed to be commented out****************
-  if(bind(sd, (struct sockaddr *)&myAddress, sizeof(struct  sockaddr)) < 0 ){
-    perror("Didn't get socket name.\n");
-    exit(2);
-  }
-  */
-  
-
-
-  /*
-  //connect for lab 7
-  if (connect(sd, (struct sockaddr *) &server_address, sizeof(struct sockaddr_in)) < 0) {
-  	close(sd);
-  	perror("Something went wrong.");
-  	exit(1);
-  }
-  */
-  
 
   rc = initSharedState(board); // Initialize the 'game' board
   rc = tictactoe(sd, board, playerNum, &server_address); // call the 'game' 
@@ -150,13 +115,6 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
   //after a multicast server is found and I'm given an IP/Port
 
 
-  //i need to connect in here
-  //idk if its &saddr *saddr or saddr
-  if (connect(socket, (struct sockaddr *) &saddr, sizeof(struct sockaddr_in)) < 0) {
-    close(socket);
-    perror("Something went wrong.");
-    exit(1);
-  }
 
 
   int i, n, len, t, choice, gameNumber;
@@ -471,7 +429,8 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       addrlen = sizeof(mg_addr);
 
       char boardInfo[9];
-      char getServer[SIZEOFMESSAGE];
+      char getServer[3];
+
       char bcast[SIZEOFMESSAGE];
       bcast[0] = VERSION;
       bcast[1] = RESUME;
@@ -487,7 +446,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
 
       //At this point i sent out to server
       //I need to get ip and port info in their message
-      rc = recvfrom(udp_sock, getServer, SIZEOFMESSAGE, 0, (struct sockaddr *) from, &addrlen);
+      rc = recvfrom(udp_sock, getServer, 3, 0, (struct sockaddr *) from, &addrlen);
 
 
       char serverIP[16];
