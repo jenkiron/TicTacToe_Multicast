@@ -376,7 +376,7 @@ int checkwin(char board[ROWS][COLUMNS])
     return 0; // Return of 0 means game over
   else
     return -1; // return of -1 means keep playing
-}o O 0
+}
 
 void print_board(char board[ROWS][COLUMNS])
 {
@@ -488,6 +488,16 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       //At this point i sent out to server
       //I need to get ip and port info in their message
       rc = recvfrom(udp_sock, getServer, SIZEOFMESSAGE, 0, (struct sockaddr *) from, &addrlen);
+
+
+      char serverIP[16];
+      inet_ntop(AF_INET, &from->sin_addr, serverIP, sizeof(serverIP));
+      printf("Server IP is %s\n", serverIP);
+      char serverPort = ntohs(from->sin_port);
+      printf("Server Port is %u\n", serverPort);
+
+
+
       if(rc > 0){
         //from sockaddr is my old tcp socket, im refreshing with the recvfrom ip and conecting to that
         from->sin_family = AF_INET;
