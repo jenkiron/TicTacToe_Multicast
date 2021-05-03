@@ -168,41 +168,36 @@ int main(int argc, char *argv[]) /* server program called with port # */
     if(FD_ISSET(MC_sock,&socketFDS)){//Accept new connection/socket and store below
       printf("MC_sock hit!\n");
       memset(message,0,40);
-      rc = recvfrom(MC_sock, message, sizeof(message), 0,
+      rc = recvfrom(MC_sock, message, 3, 0,
                    (struct sockaddr *) &from, &fromLength);//MC recv
-      printf("Received:%s on MC socket\n",message);
-      if(message[0]!= CURRENTVERSION){
+      printf("Received:%x,%x on MC socket\n",message[0],message[1]);
+      if(rc < 0){
+        printf("Error...\n");
+        exit(1);
+      }
+      else if(message[0]!= CURRENTVERSION){
         printf("Bad version. . .\n");
-        //Everything below this line is a test
-        //char replyC[3];
-        char* replyC = (char*)malloc(3);
-        short tempPort;
-        //memset(replyC,0,3);
-        //replyC[0]=CURRENTVERSION;
-        printf("TESTSending port: %d\n",portNumber);
-        tempPort = htons(portNumber);
-        printf("TEST passed htons!\n");
-        //memcpy(replyC, &tempPort, 2);
-        sprintf(replyC,"%c%2d",CURRENTVERSION,tempPort);
-        //replyC[1]=tempPort;
-        printf("TESTSending port: %d\n",replyC[1]);
-        printf("TESTSending port: %d\n",ntohs(tempPort));
-        printf("TESTSending message: %s\n",replyC);
-        //test ends here 
         continue;
       }
       else if(playingGame<MAXGAMES){
-        char replyC[3];
-        short tempPort;
-        memset(replyC,0,3);
-        replyC[0]=CURRENTVERSION;
-        tempPort = htons(portNumber);
-        replyC[1]=tempPort;
-        printf("Sending port: %d\n",replyC[1]);
-        //strcat here the port number
-        //strcat(replyC,strtol(tempPort, NULL,10));
+        //char* replyC = (char*)malloc(3);
+        char unimessage[40];
+        short tempPort = htons(portNumber);
+        unsigned char *replyC = (char *) &tempPort;
+        memset(unimessage,' ',40);
+        unimessage[0]=CURRENTVERSION;
+        //test below
+        printf("TEST : %x\n", *replyC);
+        unimessage[1] = (char) replyC[0];
+        unimessage[2] = (char) replyC[1];
+        //tempPort = htons(tempPort);
+        //printf("TEST passed htons!\n");
+        //sprintf(replyC,"%c%2d",CURRENTVERSION,tempPort);
+        //printf("TEST Sending version: %d\n",replyC[0]);
+        //printf("TEST Sending htons(port): %d\n",tempPort);
+        printf("Sending port: %d\n",portNumber);
         printf("Game Available!!!\n");
-        rc = sendto(MC_sock,replyC,sizeof(replyC),0,(struct sockaddr *) &from, fromLength);
+        rc = sendto(MC_sock,unimessage,3,0,(struct sockaddr *) &from, fromLength);
       }
     }
     if(FD_ISSET(Socket,&socketFDS)){//Accept new connection/socket and store below
