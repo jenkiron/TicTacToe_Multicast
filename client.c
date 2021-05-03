@@ -282,7 +282,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
       }      
     }
     
-    mark = (firstMove) ? '0' : 'X';
+    mark = (firstMove) ? 'O' : 'X';
 
 
     /******************************************************************/
@@ -296,7 +296,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
     /* square 8 has and '8' then it is a valid choice                          */
     if (board[row][column] == (choice + '0')){
     	board[row][column] = mark;
-    }else if(board[row][column] == 'X' || board[row][column] == '0'){
+    }else if(board[row][column] == 'X' || board[row][column] == 'O'){
       printf("Position already played.\n");
     }else{
     	printf("Invalid move ");
@@ -376,7 +376,7 @@ int checkwin(char board[ROWS][COLUMNS])
     return 0; // Return of 0 means game over
   else
     return -1; // return of -1 means keep playing
-}
+}o O 0
 
 void print_board(char board[ROWS][COLUMNS])
 {
@@ -509,13 +509,15 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
 
       if (connect(sd, (struct sockaddr *) &from, sizeof(struct sockaddr_in)) < 0) {
         close(sd);
-        printf("We failed to TCP connect to multicast server. Shutting down.\n");
+        printf("We failed to TCP connect to multicast server. Shutting down.\nShould I even connect here?\n");
         exit(1);
       }
+      //do i do this before or after connecting
       //sending board data
       ld = write(sd, boardInfo, 9);
 
       //we should resume game from here
+      //and it should always be servers move
       }//if (rc <= 0)
 
     // have to handle timeout still. if timeout and playing game, return from here
