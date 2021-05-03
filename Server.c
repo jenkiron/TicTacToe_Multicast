@@ -177,12 +177,15 @@ int main(int argc, char *argv[]) /* server program called with port # */
         char replyC[3];
         short tempPort;
         memset(replyC,0,3);
-        replyC[0]=CURRENTVERSION;
+        //replyC[0]=CURRENTVERSION;
         printf("TESTSending port: %d\n",portNumber);
         tempPort = htons(portNumber);
-        replyC[1]=tempPort;
+        printf("TEST passed htons!\n");
+        sprintf(replyC,"%c%0d",CURRENTVERSION,tempPort);
+        //replyC[1]=tempPort;
         printf("TESTSending port: %d\n",replyC[1]);
-        printf("TESTSending port: %d\n",ntohs(replyC[1]));
+        printf("TESTSending port: %d\n",ntohs(tempPort));
+        printf("TESTSending message: %s\n",replyC);
         //test ends here 
         continue;
       }
@@ -306,9 +309,9 @@ int main(int argc, char *argv[]) /* server program called with port # */
         printf("Game %d Out of sync...\n",data[3]);
         printf("Ignoring...\n");
       }
-      else{//TODO: is this else needed?
-        printf("garbage data...\n");
-      }
+      //else{//TODO: is this else needed?
+      //  printf("garbage data...\n");
+      //}
       //Received a game request that server cannot handle
       if (playingGame >=MAXGAMES && data[1] == NEWGAME){
 	printf ("Already playing %d games!!\n",MAXGAMES);
