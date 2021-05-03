@@ -174,14 +174,16 @@ int main(int argc, char *argv[]) /* server program called with port # */
       if(message[0]!= CURRENTVERSION){
         printf("Bad version. . .\n");
         //Everything below this line is a test
-        char replyC[3];
+        //char replyC[3];
+        char* replyC = (char*)malloc(3);
         short tempPort;
-        memset(replyC,0,3);
+        //memset(replyC,0,3);
         //replyC[0]=CURRENTVERSION;
         printf("TESTSending port: %d\n",portNumber);
         tempPort = htons(portNumber);
         printf("TEST passed htons!\n");
-        sprintf(replyC,"%c%0d",CURRENTVERSION,tempPort);
+        //memcpy(replyC, &tempPort, 2);
+        sprintf(replyC,"%c%2d",CURRENTVERSION,tempPort);
         //replyC[1]=tempPort;
         printf("TESTSending port: %d\n",replyC[1]);
         printf("TESTSending port: %d\n",ntohs(tempPort));
