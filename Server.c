@@ -1,7 +1,9 @@
 /**********************************************************/
 /* This program is a server that handles up to MAXGAMES at*/
 /* a time. Server is player 1 and awaits new game requests*/
-/* from the Client or player 2                            */
+/* from the Client or player 2. The Server will also      */
+/* take on clients that wish to RESUME playing if there   */
+/* is space available                                     */
 /**********************************************************/
 
 #include <stdio.h>
@@ -158,9 +160,9 @@ int main(int argc, char *argv[]) /* server program called with port # */
         if(clientSDList[i]>maxSD)
           maxSD = clientSDList[i];//Update our maxSD integer with current socket
       }
-      printf("Sock = %d MC = %d maxSD = %d\n",Socket, MC_sock, maxSD);
+      //Uncomment line below for testing
+      //printf("Sock = %d MC = %d maxSD = %d\n",Socket, MC_sock, maxSD);
       printf("waiting on select from main socket -> %d\n",Socket);
-      //printf("waiting on select from MC socket -> %d\n",MC_sock);
       rc = select (maxSD+1, &socketFDS, NULL,NULL,NULL);
       printf("select popped rc: %d\n",rc);
     
@@ -175,18 +177,17 @@ int main(int argc, char *argv[]) /* server program called with port # */
         printf("Error...\n");
         exit(1);
       }
-      else if(message[0]!= CURRENTVERSION){
+      else if(message[0]!= CURRENTVERSION){//Multicast read wrong version
         printf("Bad version. . .\n");
         continue;
       }
       else if(playingGame<MAXGAMES){
-        //char* replyC = (char*)malloc(3);
         char unimessage[40];
-        short tempPort = htons(portNumber);
-        unsigned char *replyC = (char *) &tempPort;
-        memset(unimessage,' ',40);
+        short tempPort = htons(portNumber);//Converting my port into network byte order
+        char *replyC = (char *) &tempPort;
+        memset(unimessage,' ',40);//Formating for 2byte short?
         unimessage[0]=CURRENTVERSION;
-        unimessage[1] = (char) replyC[0];
+        unimessage[1] = (char) replyC[0];//splitting short 
         unimessage[2] = (char) replyC[1];
         printf("Sending port: %d\n",portNumber);
         printf("Game Available!!!\n");
@@ -195,19 +196,19 @@ int main(int argc, char *argv[]) /* server program called with port # */
             if(gameNumbers[i]==0){
               data[3] = i;
               gameNumbers[i]=1;
-              //printf("TEST %d\n",i);
-              tempGamenum=i;
+              tempGamenum=i;//Saving the gameNumber we just discovered
               break;
             }
           }
         setTemp(activeGames,data,data[3]);
         setData(activeGames,data,data[3]);
         activeGames[data[3]].gameNumber = tempGamenum;
+        //Send client "Server available" response on MC sock
         rc = sendto(MC_sock,unimessage,3,0,(struct sockaddr *) &from, fromLength);
       }
     }
     if(FD_ISSET(Socket,&socketFDS)){//Accept new connection/socket and store below
-    //Same as above with MCsock new ifstatement
+    //accepting regular sock TCP
       connected_sd = accept (Socket,(struct sockaddr *)&from, &fromLength);
       if(connected_sd<0){
         printf("something went wrong...\n");
@@ -225,7 +226,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
       if(FD_ISSET(clientSDList[i],&socketFDS)){
         printf("received a move from the NET\n");
         rc = read(clientSDList[i],&data,SIZEOFMESSAGE);//TCP version 
-        //rc=getMoveFromNet(clientSDList[i], data, playingGame,&from);//UDP version OLD
         if(rc<=0){
           printf("client left...\n");
           close(clientSDList[i]);
@@ -262,8 +262,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
               resetGame(activeGames,data[3]);
               playingGame--;
               gameNumbers[data[3]]=0;
-              //rc = sendToNet(clientSDList[i],result,&from);//Send first move to client
-              //NEW TCP version for lab7
               rc = write(clientSDList[i], result, SIZEOFMESSAGE);
               printf("Sent %x,%x,%x,%d to game %d\n",result[0],result[1],result[2],result[4],result[3]);
             }
@@ -287,7 +285,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
                 printf("GAME OVER\n Waiting for ACK\n");
               }
               printf("Data to send: %x,%x,%x,%x,%x\n",result[0],result[1],result[2],result[3],result[4]);
-              //NEW TCP version for lab7
               rc = write(clientSDList[i], result, SIZEOFMESSAGE);
               activeGames[data[3]].clientMoves[result[2]]=1;//record move on board
               setData(activeGames,result,data[3]);          //set data for corresponding game
@@ -302,8 +299,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
         printf("Ver:%x Com:%x Pos:%x Num:%x Seq:%x\n",data[0],data[1],data[2],data[3],data[4]);
         printf("Dup?..Resending previous packet\n");
         printf("Ver:%x Com:%x Pos:%x Num:%x Seq:%x\n",activeGames[data[3]].lastMove[0],activeGames[data[3]].lastMove[1],activeGames[data[3]].lastMove[2],activeGames[data[3]].lastMove[3],activeGames[data[3]].lastMove[4]);
-        //rc = sendToNet(clientSDList[i],activeGames[data[3]].lastMove,&from);
-        //NEW TCP version for lab7
         rc = write(clientSDList[i], activeGames[data[3]].lastMove,5);
       }
       //Sequence number received is higher than last sent
@@ -311,9 +306,6 @@ int main(int argc, char *argv[]) /* server program called with port # */
         printf("Game %d Out of sync...\n",data[3]);
         printf("Ignoring...\n");
       }
-      //else{//TODO: is this else needed?
-      //  printf("garbage data...\n");
-      //}
       //Received a game request that server cannot handle
       if (playingGame >=MAXGAMES && data[1] == NEWGAME){
 	printf ("Already playing %d games!!\n",MAXGAMES);
@@ -338,8 +330,7 @@ int main(int argc, char *argv[]) /* server program called with port # */
         }
         if(!isSquareTaken(data[2],activeGames[data[3]].gboard)){
           data[4]=activeGames[data[3]].seqNum+1;
-          //rc = sendToNet(clientSDList[i],data,&from);//Send first move to client
-          //TCP version for lab7
+          //TCP version for lab7 and project
           rc = write(clientSDList[i],data,SIZEOFMESSAGE);
           printf("Sent %x,%x,%x,%x to game %d\n",data[0],data[1],data[2],data[4],data[3]);
           playingGame++;//Add to games currently being played
@@ -362,20 +353,19 @@ int main(int argc, char *argv[]) /* server program called with port # */
         resetGame(activeGames,data[3]);
         playingGame--;
         gameNumbers[data[3]]=0;
-        //rc = sendToNet(clientSDList[i],endPack,&from);//Send first move to client
-        //TCP version for lab7
+        //TCP version for lab7 and project
         rc = write(clientSDList[i], endPack, SIZEOFMESSAGE);
         printf("Sent %x,%x,%x,%d to game %d\n",endPack[0],endPack[1],endPack[2],endPack[4],endPack[3]);
       }
-      else if(data[1]==RESUME){
+      else if(data[1]==RESUME){//Resume command received
         char tempb[ROWS][COLUMNS];
         rc = read(clientSDList[i],&tempb,9);
         printf("Received %x,%x,%x,%x,%d\n",data[0],data[1],data[2],data[3],data[4]);
         int count = 1;
         for (int i=0;i<3;i++)
-          for (int j=0;j<3;j++){
+          for (int j=0;j<3;j++){//Copy resume board into saved game
             activeGames[tempGamenum].gboard[i][j] = tempb[i][j];
-            if(tempb[i][j]=='X'||tempb[i][j]=='O'){
+            if((tempb[i][j]=='X'||tempb[i][j]=='O')&&count<10){//Store moves
               activeGames[tempGamenum].clientMoves[count]=1;
               count++;
             }
@@ -595,7 +585,6 @@ int tictactoe(int sock, int playerNumber, char board[ROWS][COLUMNS], int playing
   return 0;
 }
 
-//old code not used by current server protocol CURRENTVERSION
 int checkwin(char board[ROWS][COLUMNS])
 {
   if (board[0][0] == board[0][1] && board[0][1] == board[0][2] ) // row matches
@@ -680,7 +669,7 @@ int  createServerSocket(int portNumber, int *sock){
   return 1;
 
 }
-
+//Sets up MC socket
 int createMCSocket(int portNumber, int *MC_sock){
   struct sockaddr_in addr;
   socklen_t addrlen;
@@ -712,6 +701,7 @@ int createMCSocket(int portNumber, int *MC_sock){
   return 1;
 }
 
+//Old function not used by current Server protocol CURRENTVERSION
 int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from)
 {
   /*****************************************************************/
@@ -766,6 +756,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
   return -1; // should never get here
 }
 
+//Old function not used by current Server protocol CURRENTVERSION
 int sendToNet(int sock, char result[SIZEOFMESSAGE], struct sockaddr_in * to){
   /*****************************************************************/
   /* This function is used to send data to the other side. make    */
