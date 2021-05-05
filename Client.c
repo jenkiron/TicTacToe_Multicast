@@ -45,7 +45,7 @@ int tictactoe();
 int initSharedState(char board[ROWS][COLUMNS]);
 bool checkGameMove(int);
 int isSquareTaken(int choice, char board[ROWS][COLUMNS]);
-int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from, bool firstSequence, int sequence, char board[ROWS][COLUMNS]);
+int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in * from, bool firstSequence, int *sequence, char board[ROWS][COLUMNS]);
 
 
 //Checking proper args, setting up socket
@@ -180,7 +180,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
       int serverSequence;
       bool newGamecheck = (mySequence == 1) ? true : false;  
 
-      choice = getMoveFromNet(socket, buf, 1, saddr, newGamecheck, mySequence, board);
+      choice = getMoveFromNet(socket, buf, 1, saddr, newGamecheck, &mySequence, board);
       
       if(mySequence == 1){
         gameNumber = buf[3];
@@ -201,7 +201,7 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
           //i sent and then i want to recv again....
         }else if(y == 0){
           printf("We gave the server enough tries. Closing game.\n");
-          return -1;
+          exit(1);
         }else if(newGamecheck == true){
           printf("Waiting for new game resending newgame.\n");
           write(socket, newGame, SIZEOFMESSAGE);
@@ -211,13 +211,13 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
         y--;
         printf("Waiting to receive a valid sequence.\n%d tries left.\n", y);
 
-        choice = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
+        choice = getMoveFromNet(socket, buf, 1, saddr, false, &mySequence, board);
         if(mySequence == 1){
           gameNumber = buf[3];
         }
        //your number game for server
         serverSequence = buf[4]; //sequence number to check
-      }
+      }//while(serverSequence != mySequnce)
 
       //Getting here means we got a valid buffer
       //Need to check the choice they made.
@@ -282,10 +282,10 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
       printf("Sending gameover command.\n");
     }else{
       //client won
-      int ignore = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
+      int ignore = getMoveFromNet(socket, buf, 1, saddr, false, &mySequence, board);
       while(buf[1] != 02){
         y++;
-        ignore = getMoveFromNet(socket, buf, 1, saddr, false, mySequence, board);
+        ignore = getMoveFromNet(socket, buf, 1, saddr, false, &mySequence, board);
         printf("Checking for gameover command.\n");
         if(y == 3){
           printf("Never received game over command. \nWe'll assume we won.\n");
@@ -384,7 +384,7 @@ int isSquareTaken(int choice, char board[ROWS][COLUMNS]){
     }
 }
 
-int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in *from, bool t, int sequence, char board[ROWS][COLUMNS])
+int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct sockaddr_in *from, bool t, int *sequence, char board[ROWS][COLUMNS])
 {
   /*****************************************************************/
   /* instead of getting a move from the user, get if from the net  */
@@ -451,7 +451,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
 
 
       if(rc > 0){
-        from->sin_port = htons(port);
+        from->sin_port = port;
         printf("We got infomration from multicast, %c %d\n", getServer[0], htons(port));
         close(udp_sock);
         close(sd);
@@ -461,9 +461,12 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       inet_ntop(AF_INET, &from->sin_addr, serverIP, sizeof(serverIP));
       printf("Server IP is %s\n", serverIP);
       short serverPort = from->sin_port;
-      printf("Server Port is %d - Not the one we want.\n", serverPort);
+      printf("Server Port is %d\n", serverPort);
 
-      sd = socket(AF_INET, SOCK_STREAM, 0);
+      if((sd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+        printf("failed to open stream socket.\n");
+        exit(1);
+      }
 
 
       int x = 0;
@@ -474,16 +477,29 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
         }
       }
     
-      socklen_t len = sizeof(from);
-      if (connect(sd, (struct sockaddr *) &from, len) < 0) {
+      
+      if (connect(sd, (struct sockaddr *) from, sizeof(struct sockaddr_in)) < 0) {
         close(sd);
         printf("We failed to TCP connect to multicast server. Shutting down.\n");
         exit(1);
       }
-      
-      ld = write(sd, boardInfo, 9);
 
-   
+      printf("Okay we connected lets send our game moves. Our current sequence is %d\n", *sequence);
+
+      memset(bcast, 0, SIZEOFMESSAGE);
+      bcast[0] = VERSION;
+      bcast[1] = RESUME;
+      bcast[2] = 0;
+      bcast[3] = result[3];
+      bcast[4] = *sequence; //need to send move they didnt get?
+      *sequence = *sequence + 1;
+
+      write(sd, bcast, SIZEOFMESSAGE);
+
+      ld = write(sd, boardInfo, 9);
+      
+      rc = read(sd, data, SIZEOFMESSAGE);
+
       }//if (rc <= 0)
 
     // have to handle timeout still. if timeout and playing game, return from here
