@@ -35,7 +35,7 @@
 #define MOVE 1
 
 //Defining multicast group
-#define MC_PORT 22222
+#define MC_PORT 1818
 #define MC_GROUP "239.0.0.1"
 
 //Defining functions
@@ -113,8 +113,6 @@ int tictactoe(int socket, char board[ROWS][COLUMNS],int player, struct sockaddr_
 
   //I need to establish the connection inside the tictactoe game to change the connection
   //after a multicast server is found and I'm given an IP/Port
-
-
 
 
   int i, n, len, t, choice, gameNumber;
@@ -415,11 +413,9 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
 
   do {
     //rc = recvfrom(sd, data, SIZEOFMESSAGE, 0, (struct sockaddr *) from, (socklen_t *)&fromLength);
-    printf("Do while loop to receive data from sever. If RC < 0 check multicast.\n");
     rc = read(sd, data, SIZEOFMESSAGE);
 
     if (rc <= 0){
-      char ack_port[4];
       //we only need multicast group if we lose tcp connection
       socklen_t addrlen;
       struct sockaddr_in mg_addr;
@@ -431,46 +427,46 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
 
       char boardInfo[9];
       char getServer[3];
-\
       char bcast[SIZEOFMESSAGE];
+
       bcast[0] = VERSION;
       bcast[1] = RESUME;
 
       //to broadcast
       int udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
 
-      //check for 0
-      //send message on the multicast group to see if anyone is there
-      //then recvfrom, ip and port, then go back and connect 
+      //get port from server
+      short port;
+      unsigned char *ptr = (char *) &port;
+
       printf ("Did we lose the server? Lets check the multicast group\n");
       sendto(udp_sock, bcast, sizeof(bcast), 0, (struct sockaddr*) &mg_addr, addrlen);
 
-      //At this point i sent out to server
-      //I need to get ip and port info in their message
+      //At this point i sent out to server, I need to get ip and port info in their message
       rc = recvfrom(udp_sock, getServer, 3, 0, (struct sockaddr *) from, &addrlen);
 
+
+      ptr[0] = getServer[1];
+      ptr[1] = getServer[2];
+
+
+      if(rc > 0){
+        from->sin_port = htons(port);
+        printf("We got infomration from multicast, %c %d\n", getServer[0], htons(port));
+        close(udp_sock);
+        close(sd);
+      }
 
       char serverIP[16];
       inet_ntop(AF_INET, &from->sin_addr, serverIP, sizeof(serverIP));
       printf("Server IP is %s\n", serverIP);
+      short serverPort = from->sin_port;
+      printf("Server Port is %d - Not the one we want.\n", serverPort);
 
-      char serverPort = ntohs(from->sin_port);
-      printf("Server Port is %u\n", serverPort);
+      sd = socket(AF_INET, SOCK_STREAM, 0);
 
-
-      int portt;
-      if(rc > 0){
-        //from sockaddr is my old tcp socket, im refreshing with the recvfrom ip and conecting to that
-        from->sin_family = AF_INET;
-        //sscanf(getServer[1], "%d", &portt);
-        from->sin_port = ntohs(getServer[1]);
-        printf("We got infomration from multicast, %c %c\n", getServer[0], getServer[1]);
-        //Do i need this one?
-        //from->sin_addr.s_addr = inet_ntoa(from->sin_addr.s_addr);
-      }
 
       int x = 0;
-      //send data now
       for(int i = 0; i<ROWS; i++){
         for(int j = 0; j<COLUMNS; j++){
           boardInfo[x] = board[i][j];
@@ -478,18 +474,16 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
         }
       }
     
-      //
-      if (connect(sd, (struct sockaddr *) &from, sizeof(struct sockaddr_in)) < 0) {
+      socklen_t len = sizeof(from);
+      if (connect(sd, (struct sockaddr *) &from, len) < 0) {
         close(sd);
-        printf("We failed to TCP connect to multicast server. Shutting down.\nShould I even connect here?\n");
+        printf("We failed to TCP connect to multicast server. Shutting down.\n");
         exit(1);
       }
-      //do i do this before or after connecting
-      //sending board data
+      
       ld = write(sd, boardInfo, 9);
 
-      //we should resume game from here
-      //and it should always be servers move
+   
       }//if (rc <= 0)
 
     // have to handle timeout still. if timeout and playing game, return from here
