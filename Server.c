@@ -100,8 +100,8 @@ int main(int argc, char *argv[]) /* server program called with port # */
 				* setup */
   int clientSDList[MAXCLIENTS]={0};//NEW
   fd_set socketFDS; //passing to the select command
-  int i,maxSD = 0; //New
   int tempGamenum=0;
+  int i,maxSD = 0; //New
   if(argc < 3) { // means we didn't get enough parameters
     printf("usage: tictactoe <port_number> <1>\n");
     exit(1);
@@ -200,9 +200,7 @@ int main(int argc, char *argv[]) /* server program called with port # */
               break;
             }
           }
-        //setTemp(activeGames,data,data[3]);
-        //setData(activeGames,data,data[3]);
-        activeGames[data[3]].gameNumber = tempGamenum;
+        //activeGames[data[3]].gameNumber = tempGamenum;
         //Send client "Server available" response on MC sock
         rc = sendto(MC_sock,unimessage,3,0,(struct sockaddr *) &from, fromLength);
       }
@@ -330,7 +328,7 @@ int main(int argc, char *argv[]) /* server program called with port # */
         }
         if(!isSquareTaken(data[2],activeGames[data[3]].gboard)){
           data[4]=activeGames[data[3]].seqNum+1;
-          //TCP version for lab7 and project
+          //TCP version for lab7 and projectfinal
           rc = write(clientSDList[i],data,SIZEOFMESSAGE);
           printf("Sent %x,%x,%x,%x to game %d\n",data[0],data[1],data[2],data[4],data[3]);
           playingGame++;//Add to games currently being played
@@ -353,15 +351,18 @@ int main(int argc, char *argv[]) /* server program called with port # */
         resetGame(activeGames,data[3]);
         playingGame--;
         gameNumbers[data[3]]=0;
-        //TCP version for lab7 and project
+        //TCP version for lab7 and projectfinal
         rc = write(clientSDList[i], endPack, SIZEOFMESSAGE);
         printf("Sent %x,%x,%x,%d to game %d\n",endPack[0],endPack[1],endPack[2],endPack[4],endPack[3]);
       }
       else if(data[1]==RESUME){//Resume command received
         char tempb[ROWS][COLUMNS];
+        //Read in the next 9 bytes (gameboard)
         rc = read(clientSDList[i],&tempb,9);
         printf("Received %x,%x,%x,%x,%d\n",data[0],data[1],data[2],data[3],data[4]);
-        //TESTING HERE
+        //Board reseting! TODO:make this into a function
+        //Here we take in the board received and fill our 
+        //choice bank.
         activeGames[tempGamenum].gboard[0][0] = tempb[0][0];
         if(activeGames[tempGamenum].gboard[0][0]!='1')
           activeGames[tempGamenum].clientMoves[1]=1;
@@ -389,18 +390,7 @@ int main(int argc, char *argv[]) /* server program called with port # */
         activeGames[tempGamenum].gboard[2][2] = tempb[2][2];
         if(activeGames[tempGamenum].gboard[2][2]!='9')
           activeGames[tempGamenum].clientMoves[9]=1;
-        //TESTING ENDS HERE
-        /*int count = 1;
-        for (int i=0;i<3;i++)
-          for (int j=0;j<3;j++){//Copy resume board into saved game
-            activeGames[tempGamenum].gboard[i][j] = tempb[i][j];
-            if((tempb[i][j]=='X'||tempb[i][j]=='O')){//Store moves
-              activeGames[tempGamenum].clientMoves[count]=1;
-              count++;
-            }
-            else
-              activeGames[tempGamenum].clientMoves[count]=0;
-          }*/
+        //Board set ends here
         print_board(activeGames[tempGamenum].gboard);
         for (int i=1;i<10;i++){ //Here we select a move to sent to player 2
           if(activeGames[tempGamenum].clientMoves[i]==0){
