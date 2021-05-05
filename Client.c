@@ -460,8 +460,7 @@ int getMoveFromNet(int sd, char result[SIZEOFMESSAGE], int playingGame, struct s
       char serverIP[16];
       inet_ntop(AF_INET, &from->sin_addr, serverIP, sizeof(serverIP));
       printf("Server IP is %s\n", serverIP);
-      short serverPort = from->sin_port;
-      printf("Server Port is %d\n", serverPort);
+    
 
       if((sd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         printf("failed to open stream socket.\n");
